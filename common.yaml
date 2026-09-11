@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: Schemas comunes - PPC Crianza
+  version: "1.0.0"
+  description: >
+    Este archivo NO se sirve solo; existe para ser referenciado desde los
+    contratos de cada bounded context vía $ref (ej: común.yaml#/components/schemas/Genero).
+    Acá viven los enums y tipos que se repiten en más de un dominio, y el
+    formato estándar de error y paginación que todos los endpoints deben usar.
+paths: {}
+components:
+  schemas:
+
+    # ---- Enums del modelo de dominio ----
+
+    EstadoPublicacion:
+      type: string
+      enum: [BORRADOR, PUBLICADO, ARCHIVADO]
+      description: Estado de publicación de un Modulo.
+
+    Genero:
+      type: string
+      enum: [MUJER, HOMBRE, MUJER_TRANS, HOMBRE_TRANS, NO_BINARIO, NO_DESGLOSA]
+
+    Relacion:
+      type: string
+      enum: [MADRE, PADRE, ABUELO_A, TIO_A, TUTOR_A, OTRO]
+      description: Relación del referente parental con el niño a cargo.
+
+    TipoRecurso:
+      type: string
+      enum: [VIDEO, AUDIO, IMAGEN, PDF]
+
+    TipoAccesibilidad:
+      type: string
+      enum: [TEXTO_ALTERNATIVO, SUBTITULOS, TRANSCRIPCION, AUDIO_DESCRIPCION]
+
+    # ---- Formato de error estándar ----
+    # Todo endpoint que devuelva 4xx o 5xx debe usar este shape.
+
+    Error:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo:
+          type: string
+          description: Código de error interno, estable, para uso de clientes (no cambia con el idioma).
+          example: MODULO_NO_ENCONTRADO
+        mensaje:
+          type: string
+          description: Mensaje legible para mostrar o loguear.
+          example: No existe un módulo con el id solicitado.
+        detalles:
+          type: array
+          description: Opcional. Lista de errores de validación por campo.
+          items:
+            type: object
+            properties:
+              campo:
+                type: string
+                example: titulo
+              problema:
+                type: string
+                example: no puede estar vacío
+
+    # ---- Paginación estándar ----
+    # Todo endpoint de listado usa este wrapper en la respuesta 200.
+
+    PaginacionMeta:
+      type: object
+      required: [pagina, tamañoPagina, totalElementos, totalPaginas]
+      properties:
+        pagina:
+          type: integer
+          example: 0
+          description: Número de página, base 0.
+        tamañoPagina:
+          type: integer
+          example: 20
+        totalElementos:
+          type: integer
+          example: 137
+        totalPaginas:
+          type: integer
+          example: 7
+
+  # ---- Respuestas reutilizables ----
+  # Se referencian con $ref para no repetir el shape de error en cada operación.
+
+  responses:
+    NoEncontrado:
+      description: El recurso solicitado no existe.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    SolicitudInvalida:
+      description: El cuerpo de la solicitud no pasa las validaciones.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NoAutorizado:
+      description: Falta autenticación o el token es inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Prohibido:
+      description: El usuario autenticado no tiene permiso para esta operación.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  # ---- Seguridad ----
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
