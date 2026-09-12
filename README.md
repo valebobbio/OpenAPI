@@ -25,6 +25,83 @@ estándar de `Error`, la paginación, las respuestas HTTP reutilizables
 esquema de autenticación. Cada archivo de dominio lo referencia con `$ref:
 'common.yaml#/components/...'` en vez de redefinir esos tipos.
 
+## Versionado del contrato
+
+Cada archivo de dominio lleva su propia versión semántica en `info.version`
+(`"1.0.0"`). La regla para actualizarla:
+
+- **Cambio menor** (agregar un endpoint nuevo, un campo opcional, un valor
+  nuevo a un enum): sube el segundo número (`1.0.0` → `1.1.0`).
+- **Cambio que rompe compatibilidad** (quitar/renombrar un campo, cambiar
+  un tipo de dato, quitar un endpoint): sube el primer número (`1.0.0` →
+  `2.0.0`).
+- El historial de qué cambió en cada versión queda en el mensaje del commit
+  o pull request correspondiente; si el volumen de cambios crece, se puede
+  sumar un `CHANGELOG.md` por archivo.
+
+## Ejemplos de respuestas y errores
+
+Todo endpoint debe documentar al menos un ejemplo de respuesta exitosa y un
+ejemplo por cada código de error que declare — no alcanza con el `schema`
+solo. Esto se agrega con la clave `examples` (no confundir con `example`
+en singular, que es solo para un campo suelto):
+
+```yaml
+responses:
+  '200':
+    description: Módulo encontrado.
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/Modulo'
+        examples:
+          publicado:
+            summary: Módulo ya publicado
+            value:
+              id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              titulo: "Lactancia materna: primeros pasos"
+              estadoPublicacion: PUBLICADO
+              fechaCreacion: "2026-03-10"
+  '404':
+    description: No existe un módulo con ese id.
+    content:
+      application/json:
+        schema:
+          $ref: 'common.yaml#/components/schemas/Error'
+        examples:
+          noEncontrado:
+            value:
+              codigo: MODULO_NO_ENCONTRADO
+              mensaje: No existe un módulo con el id solicitado.
+```
+
+Cada archivo de dominio debe tener al menos un ejemplo de error usando el
+`Error` de `common.yaml`, con un `codigo` específico de ese dominio (ej.
+`MODULO_NO_ENCONTRADO`, `ENCUESTA_NO_ENCONTRADA`) — así queda claro y
+consistente para quien consuma la API desde ambos lados.
+
+## Tags de audiencia (móvil vs. CMS, sin separar archivos)
+
+Los contratos no se separan en archivos distintos para móvil y CMS —
+conviven en el mismo archivo de dominio — pero cada operación indica a qué
+cliente corresponde mediante un segundo tag, además del tag de dominio:
+
+```yaml
+get:
+  operationId: listarModulos
+  tags: [Modulos, cms]      # el CMS ve/gestiona todos los estados
+
+get:
+  operationId: listarModulosPublicados
+  tags: [Modulos, mobile]   # la app móvil solo ve los publicados
+```
+
+Los tags disponibles son `cms` y `mobile`. Una operación puede tener ambos
+si la usan los dos clientes (ej. `GET /modulos/{id}` para ver el detalle).
+Herramientas como Redoc o Swagger UI permiten filtrar la documentación por
+tag, así que cada equipo puede mirar solo "su" subconjunto de endpoints sin
+que exista ningún archivo aparte que mantener.
+
 ## Cómo visualizar los contratos (offline, sin subir nada a la nube)
 
 Como los archivos se referencian entre sí, herramientas basadas solo en el
