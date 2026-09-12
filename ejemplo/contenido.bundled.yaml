@@ -1,0 +1,395 @@
+openapi: 3.0.3
+info:
+  title: API de Contenido - PPC Crianza
+  version: 1.0.0
+  description: |
+    Contrato del bounded context "Contenido": gestión de Módulos y sus Secciones. Sirve de PLANTILLA de referencia para el resto de los contratos del proyecto (encuestas, usuarios, notificaciones).
+    Convenciones usadas en todo este archivo (repetir en los demás):
+      - Rutas en plural, kebab-case si el nombre tiene más de una palabra.
+      - IDs siempre como UUID string, nunca int autoincremental expuesto.
+      - Campos de dominio en español, camelCase, igual que en el modelo.
+      - Todo listado pagina con query params `pagina` y `tamañoPagina`,
+        y devuelve el wrapper con `contenido` + `paginacion` (ver common.yaml).
+      - Todo error usa el schema Error de common.yaml.
+      - Los DTOs de entrada (*Input) son distintos de los de salida:
+        nunca se serializa la entidad de dominio directo (regla del
+        modelo: bounded contexts no se exponen crudos hacia afuera).
+      - Fechas en formato ISO 8601 (date o date-time según el campo).
+servers:
+  - url: https://api.ppc-crianza.inau.gub.uy/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Modulos
+    description: Gestión de módulos de contenido educativo.
+  - name: Secciones
+    description: Secciones que componen un módulo.
+  - name: cms
+    description: Operaciones consumidas por el CMS de administración.
+  - name: mobile
+    description: Operaciones consumidas por la app móvil (referentes parentales).
+paths:
+  /modulos:
+    get:
+      operationId: listarModulos
+      tags:
+        - Modulos
+        - cms
+        - mobile
+      summary: Lista módulos, con filtros opcionales.
+      description: |
+        Endpoint de uso principalmente del CMS (administradores). La app móvil normalmente solo debería recibir módulos en estado PUBLICADO; eso se resuelve del lado del backend según el rol del token, no con un parámetro que el cliente pueda manipular.
+      parameters:
+        - name: estadoPublicacion
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EstadoPublicacion'
+          description: Filtra por estado. Si se omite, devuelve todos los que el rol del usuario puede ver.
+        - name: pagina
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: tamañoPagina
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Listado paginado de módulos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contenido:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Modulo'
+                  paginacion:
+                    $ref: '#/components/schemas/PaginacionMeta'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+    post:
+      operationId: crearModulo
+      tags:
+        - Modulos
+        - cms
+      summary: Crea un nuevo módulo (arranca en estado BORRADOR).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuloInput'
+      responses:
+        '201':
+          description: Módulo creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modulo'
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+  /modulos/{moduloId}:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: obtenerModulo
+      tags:
+        - Modulos
+        - cms
+        - mobile
+      summary: Obtiene un módulo por id.
+      responses:
+        '200':
+          description: Módulo encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modulo'
+              examples:
+                publicado:
+                  summary: Módulo ya publicado
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    titulo: 'Lactancia materna: primeros pasos'
+                    estadoPublicacion: PUBLICADO
+                    fechaCreacion: '2026-03-10'
+                borrador:
+                  summary: Módulo todavía sin publicar
+                  value:
+                    id: 8c9e2a10-4b1d-4f3a-9e2c-1a2b3c4d5e6f
+                    titulo: Sueño seguro del bebé
+                    estadoPublicacion: BORRADOR
+                    fechaCreacion: '2026-09-01'
+        '404':
+          description: No existe un módulo con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                noEncontrado:
+                  value:
+                    codigo: MODULO_NO_ENCONTRADO
+                    mensaje: No existe un módulo con el id solicitado.
+    put:
+      operationId: actualizarModulo
+      tags:
+        - Modulos
+        - cms
+      summary: Actualiza título y/o estado de publicación de un módulo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuloInput'
+      responses:
+        '200':
+          description: Módulo actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modulo'
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    delete:
+      operationId: archivarModulo
+      tags:
+        - Modulos
+        - cms
+      summary: Archiva un módulo (soft delete; pasa a estado ARCHIVADO).
+      description: |
+        No se hace borrado físico: se pasa estadoPublicacion a ARCHIVADO. Se modela como DELETE por convención REST, pero el efecto real es un cambio de estado — dejar esto documentado evita confusión al implementar.
+      responses:
+        '204':
+          description: Módulo archivado correctamente.
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+  /modulos/{moduloId}/secciones:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listarSeccionesDeModulo
+      tags:
+        - Secciones
+        - cms
+        - mobile
+      summary: Lista las secciones de un módulo, ordenadas por el campo `orden`.
+      responses:
+        '200':
+          description: Secciones del módulo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeccionMod'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    post:
+      operationId: crearSeccion
+      tags:
+        - Secciones
+        - cms
+      summary: Agrega una sección a un módulo (opcionalmente como subsección de otra).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeccionModInput'
+      responses:
+        '201':
+          description: Sección creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeccionMod'
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Modulo:
+      type: object
+      required:
+        - id
+        - titulo
+        - estadoPublicacion
+        - fechaCreacion
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+          example: 'Lactancia materna: primeros pasos'
+        estadoPublicacion:
+          $ref: '#/components/schemas/EstadoPublicacion'
+        fechaCreacion:
+          type: string
+          format: date
+    ModuloInput:
+      type: object
+      required:
+        - titulo
+      description: |
+        DTO de entrada. No incluye estadoPublicacion en la creación (siempre arranca BORRADOR); sí se permite en la actualización.
+      properties:
+        titulo:
+          type: string
+          minLength: 1
+          maxLength: 200
+        estadoPublicacion:
+          $ref: '#/components/schemas/EstadoPublicacion'
+    SeccionMod:
+      type: object
+      required:
+        - id
+        - titulo
+        - orden
+        - archivada
+        - texto
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        orden:
+          type: integer
+        archivada:
+          type: boolean
+        texto:
+          type: string
+        seccionPadreId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Id de la sección de la que es subsección, si aplica (relación 0..1 del modelo).
+    SeccionModInput:
+      type: object
+      required:
+        - titulo
+        - orden
+        - texto
+      properties:
+        titulo:
+          type: string
+          minLength: 1
+        orden:
+          type: integer
+          minimum: 0
+        texto:
+          type: string
+        seccionPadreId:
+          type: string
+          format: uuid
+          nullable: true
+    EstadoPublicacion:
+      type: string
+      enum:
+        - BORRADOR
+        - PUBLICADO
+        - ARCHIVADO
+      description: Estado de publicación de un Modulo.
+    PaginacionMeta:
+      type: object
+      required:
+        - pagina
+        - tamañoPagina
+        - totalElementos
+        - totalPaginas
+      properties:
+        pagina:
+          type: integer
+          example: 0
+          description: Número de página, base 0.
+        tamañoPagina:
+          type: integer
+          example: 20
+        totalElementos:
+          type: integer
+          example: 137
+        totalPaginas:
+          type: integer
+          example: 7
+    Error:
+      type: object
+      required:
+        - codigo
+        - mensaje
+      properties:
+        codigo:
+          type: string
+          description: Código de error interno, estable, para uso de clientes (no cambia con el idioma).
+          example: MODULO_NO_ENCONTRADO
+        mensaje:
+          type: string
+          description: Mensaje legible para mostrar o loguear.
+          example: No existe un módulo con el id solicitado.
+        detalles:
+          type: array
+          description: Opcional. Lista de errores de validación por campo.
+          items:
+            type: object
+            properties:
+              campo:
+                type: string
+                example: titulo
+              problema:
+                type: string
+                example: no puede estar vacío
+  responses:
+    NoAutorizado:
+      description: Falta autenticación o el token es inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    SolicitudInvalida:
+      description: El cuerpo de la solicitud no pasa las validaciones.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Prohibido:
+      description: El usuario autenticado no tiene permiso para esta operación.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NoEncontrado:
+      description: El recurso solicitado no existe.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
