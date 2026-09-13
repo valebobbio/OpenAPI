@@ -116,6 +116,13 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
 
+    Conflicto:
+      description: La operación no puede realizarse debido al estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
   # ---- Seguridad ----
 
   securitySchemes:
