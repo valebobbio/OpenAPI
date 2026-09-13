@@ -1,0 +1,1018 @@
+openapi: 3.0.3
+info:
+  title: API de Contenido - PPC Crianza
+  version: "1.0.0"
+  description: >
+    Contrato del bounded context "Contenido": gestión de Módulos y sus
+    Secciones. Sirve de PLANTILLA de referencia para el resto de los
+    contratos del proyecto (encuestas, usuarios, notificaciones).
+
+    Convenciones usadas en todo este archivo (repetir en los demás):
+      - Rutas en plural, kebab-case si el nombre tiene más de una palabra.
+      - IDs siempre como UUID string, nunca int autoincremental expuesto.
+      - Campos de dominio en español, camelCase, igual que en el modelo.
+      - Todo listado pagina con query params `pagina` y `tamañoPagina`,
+        y devuelve el wrapper con `contenido` + `paginacion` (ver common.yaml).
+      - Todo error usa el schema Error de common.yaml.
+      - Los DTOs de entrada (*Input) son distintos de los de salida:
+        nunca se serializa la entidad de dominio directo (regla del
+        modelo: bounded contexts no se exponen crudos hacia afuera).
+      - Fechas en formato ISO 8601 (date o date-time según el campo).
+
+servers:
+  - url: https://api.ppc-crianza.inau.gub.uy/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Modulos
+    description: Gestión de módulos de contenido educativo.
+  - name: Secciones
+    description: Secciones que componen un módulo.
+  - name: cms
+    description: Operaciones consumidas por el CMS de administración.
+  - name: mobile
+    description: Operaciones consumidas por la app móvil (referentes parentales).
+
+paths:
+
+  /modulos:
+    get:
+      operationId: listarModulos
+      tags: [Modulos, cms, mobile]
+      summary: Lista módulos, con filtros opcionales.
+      description: >
+        Endpoint de uso principalmente del CMS (administradores). La app
+        móvil normalmente solo debería recibir módulos en estado PUBLICADO;
+        eso se resuelve del lado del backend según el rol del token, no
+        con un parámetro que el cliente pueda manipular.
+      parameters:
+        - name: estadoPublicacion
+          in: query
+          required: false
+          schema:
+            $ref: '../common.yaml#/components/schemas/EstadoPublicacion'
+          description: Filtra por estado. Si se omite, devuelve todos los que el rol del usuario puede ver.
+        - name: pagina
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: tamañoPagina
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Listado paginado de módulos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contenido:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Modulo'
+                  paginacion:
+                    $ref: '../common.yaml#/components/schemas/PaginacionMeta'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+
+    post:
+      operationId: crearModulo
+      tags: [Modulos, cms]
+      summary: Crea un nuevo módulo (arranca en estado BORRADOR).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuloInput'
+      responses:
+        '201':
+          description: Módulo creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modulo'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+        '403':
+          $ref: '../common.yaml#/components/responses/Prohibido'
+
+  /modulos/{moduloId}:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: obtenerModulo
+      tags: [Modulos, cms, mobile]
+      summary: Obtiene un módulo por id.
+      description: >
+        La app móvil solo debería obtener módulos en estado PUBLICADO.
+        El CMS puede consultar módulos en cualquier estado, incluido ARCHIVADO,
+        según los permisos del usuario autenticado.
+      responses:
+        '200':
+          description: Módulo encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modulo'
+              examples:
+                publicado:
+                  summary: Módulo ya publicado
+                  value:
+                    id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    titulo: "Lactancia materna: primeros pasos"
+                    descripcion: "Información y recomendaciones sobre lactancia materna."
+                    estadoPublicacion: PUBLICADO
+                    fechaCreacion: "2026-03-10"
+                borrador:
+                  summary: Módulo todavía sin publicar
+                  value:
+                    id: "8c9e2a10-4b1d-4f3a-9e2c-1a2b3c4d5e6f"
+                    titulo: "Sueño seguro del bebé"
+                    descripcion: "Recomendaciones para favorecer un descanso seguro del bebé."
+                    estadoPublicacion: BORRADOR
+                    fechaCreacion: "2026-09-01"
+        '404':
+          description: No existe un módulo con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '../common.yaml#/components/schemas/Error'
+              examples:
+                noEncontrado:
+                  value:
+                    codigo: MODULO_NO_ENCONTRADO
+                    mensaje: No existe un módulo con el id solicitado.
+
+    put:
+      operationId: editarModulo
+      tags: [Modulos, cms]
+      summary:  Actualiza el título, descripción de un módulo o reordena las secciones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditarModuloInput'
+      responses:
+        '200':
+          description: Módulo editado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modulo'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    delete:
+      operationId: archivarModulo
+      tags: [Modulos, cms]
+      summary: Archiva un módulo (soft delete; pasa a estado ARCHIVADO).
+      description: >
+        No se hace borrado físico: se pasa estadoPublicacion a ARCHIVADO.
+        Se modela como DELETE por convención REST, pero el efecto real es
+        un cambio de estado — dejar esto documentado evita confusión al
+        implementar.
+      responses:
+        '204':
+          description: Módulo archivado correctamente.
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+  /modulos/{moduloId}/publicar:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: publicarModulo
+      tags: [Modulos, cms]
+      summary: Actualiza el estado de un módulo de BORRADOR a PUBLICADO.
+      responses:
+        '200':
+          description: Módulo publicado correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Modulo'
+        '400':
+          description: El módulo no está en estado BORRADOR.
+          content:
+            application/json:
+              schema:
+                $ref: '../common.yaml#/components/schemas/Error'
+              examples:
+                estadoInvalido:
+                  value:
+                    codigo: ESTADO_MODULO_INVALIDO
+                    mensaje: El módulo debe estar en estado BORRADOR para poder publicarse.
+        '404':
+            $ref: '../common.yaml#/components/responses/NoEncontrado'
+      
+  /modulos/{moduloId}/historial:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: listarHistorialModulo
+      tags: [Modulos, cms]
+      summary: Obtiene el historial de cambios de un módulo.
+      parameters:
+        - name: pagina
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: tamañoPagina
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Historial de cambios del módulo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contenido:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HistorialModulo'
+                  paginacion:
+                    $ref: '../common.yaml#/components/schemas/PaginacionMeta'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    post:
+      operationId: registrarHistorialModulo
+      tags: [Modulos, cms]
+      summary: Registra un cambio realizado sobre el contenido de un módulo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistorialModuloInput'
+      responses:
+        '201':
+          description: Entrada de historial registrada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistorialModulo'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+  /modulos/{moduloId}/secciones:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: listarSeccionesDeModulo
+      tags: [Secciones, cms, mobile]
+      summary: Lista las secciones de un módulo, ordenadas por el campo `orden`.
+      description: >
+        La app móvil solo obtiene las secciones en estado PUBLICADO.
+      responses:
+        '200':
+          description: Secciones del módulo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeccionMod'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    post:
+      operationId: crearSeccion
+      tags: [Secciones, cms]
+      summary: Agrega una sección a un módulo (opcionalmente como subsección de otra).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeccionModInput'
+      responses:
+        '201':
+          description: Sección creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeccionMod'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+  /modulos/{moduloId}/secciones/{seccionId}:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: seccionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+
+    get:
+      operationId: obtenerSeccion
+      tags: [Secciones, cms, mobile]
+      summary: Obtiene una sección por id.
+      description: >
+        La app móvil solo debería obtener secciones en estado PUBLICADO.
+        El CMS puede depende de los permisos del usuario autenticado.
+      responses:
+        '200':
+          description: Sección encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeccionMod'
+              examples:
+                publicado:
+                  summary: Sección ya publicada
+                  value:
+                    id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    titulo: "Posición segura para dormir"
+                    texto: "Se recomienda acostar al bebé boca arriba para dormir."
+                    orden: 1
+                    estadoPublicacion: PUBLICADO
+                    seccionPadreId: null
+                borrador:
+                  summary: Sección todavía sin publicar
+                  value:
+                    id: "8c9e2a10-4b1d-4f3a-9e2c-1a2b3c4d5e6f"
+                    titulo: "Sueño seguro del bebé"
+                    texto: "Recomendaciones para favorecer un descanso seguro del bebé."
+                    orden: 1
+                    estadoPublicacion: BORRADOR
+                    seccionPadreId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        '404':
+          description: No existe una sección con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '../common.yaml#/components/schemas/Error'
+              examples:
+                noEncontrado:
+                  value:
+                    codigo: SECCION_NO_ENCONTRADA
+                    mensaje: No existe una sección con el id solicitado.
+
+    put:
+      operationId: editarSeccion
+      tags: [Secciones, cms]
+      summary:  Edita una sección existente.
+      description: >
+        Permite modificar el título, el contenido de texto de una sección, 
+        el nivel jerárquico y el orden de las subsecciones. 
+        La gestión de archivos multimedia se realiza mediante otras operaciones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditarSeccionInput'
+      responses:
+        '200':
+          description: Sección editada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeccionMod'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    delete:
+      operationId: archivarSeccion
+      tags: [Modulos, cms]
+      summary: Archiva una sección (soft delete; pasa a estado ARCHIVADO).
+      responses:
+        '204':
+          description: Sección archivada correctamente.
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+  
+  /modulos/{moduloId}/secciones/{seccionId}/publicar:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: seccionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      operationId: publicarSeccion
+      tags: [Secciones, cms]
+      summary: Actualiza el estado de una sección de BORRADOR a PUBLICADO.
+      responses:
+        '200':
+          description: Sección publicada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeccionMod'
+        '400':
+          description: La sección no está en estado BORRADOR.
+          content:
+            application/json:
+              schema:
+                $ref: '../common.yaml#/components/schemas/Error'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+  /modulos/{moduloId}/secciones/{seccionId}/recursos:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: seccionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      operationId: listarRecursosDeSeccion
+      tags: [RecursosMultimedia, cms, mobile]
+      summary: Lista los recursos multimedia de una sección.
+      parameters:
+        - name: pagina
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: tamañoPagina
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Listado paginado de recursos multimedia de la sección.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contenido:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecursoMultimedia'
+                  paginacion:
+                    $ref: '../common.yaml#/components/schemas/PaginacionMeta'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'     
+
+    post:
+      operationId: agregarRecursoMultimedia
+      tags: [RecursosMultimedia, cms]
+      summary: Agrega un recurso multimedia a una sección.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Recurso multimedia agregado correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecursoMultimedia'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+  
+  /modulos/{moduloId}/secciones/{seccionId}/recursos/{recursoId}:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: seccionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: recursoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: obtenerRecursoMultimedia
+      tags: [RecursosMultimedia, cms, mobile]
+      summary: Obtiene un recurso multimedia de una sección.
+      responses:
+        '200':
+          description: Recurso multimedia encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecursoMultimedia'
+
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'      
+
+    put:
+      operationId: reemplazarRecursoMultimedia
+      tags: [RecursosMultimedia, cms]
+      description: >
+        Permite reemplazar el archivo asociado a un recurso multimedia.
+      summary: Reemplaza un recurso multimedia de una sección.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Recurso multimedia reemplazado correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecursoMultimedia'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    delete:
+      operationId: archivarRecursoMultimedia
+      tags: [RecursosMultimedia, cms]
+      summary: Archiva un recurso multimedia de una sección.
+      description: >
+        El recurso multimedia no se elimina físicamente del sistema.
+        Se archiva para permitir la correcta sincronización con los
+        dispositivos móviles.
+      responses:
+        '204':
+          description: Recurso multimedia archivado correctamente.
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+  /modulos/{moduloId}/secciones/{seccionId}/recursos/{recursoId}/archivo:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: seccionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: recursoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: descargarRecursoMultimedia
+      tags: [RecursosMultimedia, mobile]
+      summary: Descarga el archivo asociado a un recurso multimedia.
+      responses:
+        '200':
+          description: Archivo multimedia.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'  
+
+  /modulos/{moduloId}/secciones/{seccionId}/recursos/{recursoId}/variantes-accesibles:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: seccionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: recursoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: listarVariantesAccesiblesDeRecurso
+      tags: [RecursosMultimedia, mobile]
+      summary: Lista las variantes accesibles de un recurso multimedia.
+      responses:
+        '200':
+          description: Listado de variantes accesibles del recurso multimedia.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contenido:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VarianteAccesible'
+                  paginacion:
+                    $ref: '../common.yaml#/components/schemas/PaginacionMeta'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    post:
+      operationId: agregarVarianteAccesible
+      tags: [RecursosMultimedia, cms]
+      summary: Agrega una variante accesible a un recurso multimedia.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VarianteAccesibleInput'
+      responses:
+        '201':
+          description: Variante accesible agregada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VarianteAccesible'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+  /modulos/{moduloId}/secciones/{seccionId}/recursos/{recursoId}/variantes-accesibles/{varianteId}:
+    parameters:
+      - name: moduloId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: seccionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: recursoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: varianteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: obtenerVarianteAccesible
+      tags: [RecursosMultimedia, cms, mobile]
+      summary: Obtiene una variante accesible de un recurso multimedia.
+      responses:
+        '200':
+          description: Variante accesible encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VarianteAccesible'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    put:
+      operationId: editarVarianteAccesible
+      tags: [RecursosMultimedia, cms]
+      summary: Edita una variante accesible de un recurso multimedia.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VarianteAccesibleInput'
+      responses:
+        '200':
+          description: Variante accesible editada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VarianteAccesible'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    delete:
+      operationId: archivcarVarianteAccesible
+      tags: [RecursosMultimedia, cms]
+      summary:  Archiva una variante accesible de un recurso multimedia.
+      responses:
+        '204':
+          description: Variante accesible archivada correctamente.
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+      
+            
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: '../common.yaml#/components/securitySchemes/bearerAuth'
+  schemas:
+
+    Modulo:
+      type: object
+      description: >
+        Se incluye el campo descripcion presente en las historias de usuario de creacion y edicion
+        de modulo aunque no figuran en el modelo de dominio
+      required: [id, titulo, estadoPublicacion, fechaCreacion]
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+          example: "Lactancia materna: primeros pasos"
+        descripcion:
+          type: string
+        estadoPublicacion:
+          $ref: '../common.yaml#/components/schemas/EstadoPublicacion'
+        fechaCreacion:
+          type: string
+          format: date
+
+
+    ModuloInput:
+      type: object
+      required: [titulo]
+      description: >
+        DTO de entrada. No incluye estadoPublicacion en la creación
+        (siempre arranca BORRADOR).Se incluye el campo descripcion presente en las historias de usuario de creacion y edicion
+        de modulo aunque no figuran en el modelo de dominio
+      properties:
+        titulo:
+          type: string
+          minLength: 1
+          maxLength: 200
+        descripcion:
+          type: string
+
+
+    EditarModuloInput:
+      type: object
+      minProperties: 1
+      properties:
+        titulo:
+          type: string
+          minLength: 1
+        descripcion:
+          type: string
+        seccionesOrdenadasIds:
+          type: array
+          uniqueItems: true
+          description: >
+            Lista con los ids de las secciones de primer nivel del módulo
+            en el orden en que deben mostrarse.
+          items:
+            type: string
+            format: uuid  
+
+
+    HistorialModulo:
+      type: object
+      required: [fecha, titulo, comentario]
+      properties:
+        fecha:
+          type: string
+          format: date-time
+        titulo:
+          type: string
+        comentario:
+          type: string
+
+
+    HistorialModuloInput:
+      type: object
+      required: [titulo, comentario]
+      properties:
+        titulo:
+          type: string
+          minLength: 1
+        comentario:
+          type: string
+          minLength: 1  
+
+    SeccionMod:
+      type: object
+      required: [id, titulo, orden, estadoPublicacion, texto]
+      description: >
+        Se utiliza estadoPublicacion en lugar de archivada para representar los
+        estados BORRADOR, PUBLICADO y ARCHIVADO.
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        orden:
+          type: integer
+        estadoPublicacion:
+          $ref: '../common.yaml#/components/schemas/EstadoPublicacion'
+        texto:
+          type: string
+        seccionPadreId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Id de la sección de la que es subsección, si aplica (relación 0..1 del modelo).
+
+
+    SeccionModInput:
+      type: object
+      required: [titulo, texto]
+      properties:
+        titulo:
+          type: string
+          minLength: 1
+        orden:
+          description: >
+            Posición de la sección dentro de su nivel jerárquico.
+            Si se omite, la sección se agrega en la última posición.
+          type: integer
+          minimum: 0
+        texto:
+          type: string
+        seccionPadreId:
+          type: string
+          format: uuid
+          nullable: true
+
+    EditarSeccionInput:
+      type: object
+      minProperties: 1
+      properties:
+        titulo:
+          type: string
+          minLength: 1
+        texto:
+          type: string
+        seccionPadreId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Id de la sección padre. Si es null, la sección pertenece
+            al primer nivel del módulo.
+        subseccionesOrdenadasIds:
+          type: array
+          uniqueItems: true
+          description: >
+            Lista con los ids de las subsecciones hijas directas
+            en el orden en que deben mostrarse.
+          items:
+            type: string
+            format: uuid
+
+    RecursoMultimedia:
+      type: object
+      required: [id, tamaño, formato, archivado]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tamaño:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Tamaño del archivo en bytes.
+        formato:
+          type: string
+          description: Formato o tipo MIME del archivo.
+          example: "image/jpeg"
+        archivado:
+          type: boolean
+          description: >
+            Indica si el recurso fue archivado. 
+          default: false
+
+    VarianteAccesible:
+      type: object
+      description: >
+        Se agrega un identificador a la variante accesible para permitir
+        su gestión individual. El modelo de dominio no define actualmente
+        un id.
+      required: [id, tipo, contenido, archivada]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          description: Tipo de variante accesible del recurso multimedia.
+          example: "TEXTO_ALTERNATIVO"
+        contenido:
+          type: string
+          description: Contenido correspondiente a la variante accesible.
+        archivada:
+          type: boolean
+          description: Indica si la variante accesible fue archivada.
+          default: false
+
+    VarianteAccesibleInput:
+      type: object
+      minProperties: 1
+      properties:
+        tipo:
+          type: string
+        contenido:
+          type: string
+  
+
+    
