@@ -1,0 +1,467 @@
+openapi: 3.0.3
+
+info:
+  title: API de Encuestas - PPC Crianza
+  version: "1.0.0"
+  description: >
+    Contrato OpenAPI de encuestas.
+
+tags:
+  - name: encuestas
+    description: Operaciones relacionadas con encuestas.
+  - name: cms
+    description: Operaciones destinadas al CMS.
+  - name: mobile
+    description: Operaciones destinadas a la aplicación móvil.
+
+paths:
+
+  /modulos/{moduloId}/encuesta:
+
+    post:
+      tags:
+        - encuestas
+        - cms
+      summary: Crear encuesta de módulo
+      description: >
+        Crea la encuesta de cierre asociada a un módulo.
+
+      parameters:
+        - $ref: '#/components/parameters/ModuloId'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearEncuestaModulo'
+
+      responses:
+        '201':
+          description: Encuesta creada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncuestaModulo'
+
+        '400':
+          $ref: './common.yaml#/components/responses/SolicitudInvalida'
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+        '409':
+          description: La encuesta de cierre ya existe para el módulo.
+          content:
+            application/json:
+              schema:
+                $ref: './common.yaml#/components/responses/Conflicto'
+
+
+  /encuestas/{encuestaId}:
+
+    get:
+      tags:
+        - encuestas
+        - mobile
+      summary: Consultar encuesta
+      description: >
+        Obtiene una encuesta de módulo para ser presentada en la aplicación
+        móvil.
+
+      parameters:
+        - $ref: '#/components/parameters/EncuestaId'
+
+      responses:
+        '200':
+          description: Encuesta obtenida correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncuestaModulo'
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+
+    put:
+      tags:
+        - encuestas
+        - cms
+      summary: Editar encuesta de módulo
+      description: >
+        Modifica una encuesta de cierre de módulo.
+
+      parameters:
+        - $ref: '#/components/parameters/EncuestaId'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditarEncuestaModulo'
+
+      responses:
+        '200':
+          description: Encuesta modificada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncuestaModulo'
+
+        '400':
+          $ref: './common.yaml#/components/responses/SolicitudInvalida'
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+        '409':
+          description: La modificación no puede realizarse en el estado actual de la encuesta.
+          content:
+            application/json:
+              schema:
+                $ref: './common.yaml#/components/responses/Conflicto'
+
+
+    delete:
+      tags:
+        - encuestas
+        - cms
+      summary: Eliminar encuesta de módulo
+      description: >
+        Elimina una encuesta de cierre de módulo.
+
+      parameters:
+        - $ref: '#/components/parameters/EncuestaId'
+
+      responses:
+        '204':
+          description: Encuesta eliminada correctamente.
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+
+  /encuestas/{encuestaId}/respuestas:
+
+    post:
+      tags:
+        - encuestas
+        - mobile
+      summary: Enviar respuestas de encuesta
+      description: >
+        Registra las respuestas de un referente parental para una encuesta
+        de módulo. Se permite enviar solamente una parte de las preguntas.
+
+      parameters:
+        - $ref: '#/components/parameters/EncuestaId'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResponderEncuesta'
+
+      responses:
+        '201':
+          description: Respuestas registradas correctamente.
+
+        '400':
+          $ref: './common.yaml#/components/responses/SolicitudInvalida'
+
+        '403':
+          $ref: './common.yaml#/components/responses/Prohibido'
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+        '409':
+          description: Las respuestas no pueden registrarse porque el módulo no se encuentra completado.
+          content:
+            application/json:
+              schema:
+                $ref: './common.yaml#/components/responses/Conflicto'
+
+
+  /encuestas/{encuestaId}/datos:
+
+    get:
+      tags:
+        - encuestas
+        - cms
+      summary: Consultar datos de encuesta
+      description: >
+        Consulta la información recabada de una encuesta para su análisis.
+
+      parameters:
+        - $ref: '#/components/parameters/EncuestaId'
+
+      responses:
+        '200':
+          description: Datos de la encuesta obtenidos correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatosEncuesta'
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+
+components:
+
+  parameters:
+
+    ModuloId:
+      name: moduloId
+      in: path
+      required: true
+      description: Identificador del módulo al que pertenece la encuesta.
+      schema:
+        type: string
+        format: uuid
+
+    EncuestaId:
+      name: encuestaId
+      in: path
+      required: true
+      description: Identificador de la encuesta.
+      schema:
+        type: string
+        format: uuid
+
+
+  schemas:
+
+    EncuestaModulo:
+      type: object
+      required:
+        - id
+        - titulo
+        - paginas
+      properties:
+        id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+        paginas:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Pagina'
+
+
+    CrearEncuestaModulo:
+      type: object
+      required:
+        - titulo
+        - paginas
+      properties:
+        titulo:
+          type: string
+        paginas:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PaginaInput'
+
+
+    EditarEncuestaModulo:
+      type: object
+      required:
+        - titulo
+        - paginas
+      properties:
+        titulo:
+          type: string
+        paginas:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PaginaInput'
+
+
+    Pagina:
+      type: object
+      required:
+        - id
+        - orden
+        - descripcion
+        - preguntas
+      properties:
+        id:
+          type: string
+          format: uuid
+        orden:
+          type: integer
+        descripcion:
+          type: string
+        preguntas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pregunta'
+
+
+    PaginaInput:
+      type: object
+      required:
+        - orden
+        - descripcion
+        - preguntas
+      properties:
+        orden:
+          type: integer
+        descripcion:
+          type: string
+        preguntas:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreguntaInput'
+
+
+    Pregunta:
+      type: object
+      required:
+        - id
+        - letra
+        - respuestasPosibles
+      properties:
+        id:
+          type: string
+          format: uuid
+        letra:
+          type: string
+        respuestasPosibles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RespuestaPosible'
+
+
+    PreguntaInput:
+      type: object
+      required:
+        - letra
+        - respuestasPosibles
+      properties:
+        letra:
+          type: string
+        respuestasPosibles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RespuestaPosibleInput'
+
+
+    RespuestaPosible:
+      type: object
+      required:
+        - id
+        - orden
+        - valor
+        - cantSelec
+      properties:
+        id:
+          type: string
+          format: uuid
+        orden:
+          type: integer
+        valor:
+          type: string
+        cantSelec:
+          type: integer
+
+
+    RespuestaPosibleInput:
+      type: object
+      required:
+        - orden
+        - valor
+      properties:
+        orden:
+          type: integer
+        valor:
+          type: string
+
+
+    ResponderEncuesta:
+      type: object
+      required:
+        - edadNiño
+        - respuestas
+      properties:
+        edadNiño:
+          type: integer
+        idAnonimo:
+          type: integer
+          nullable: true
+        respuestas:
+          type: array
+          items:
+            $ref: '#/components/schemas/RespuestaEncuesta'
+
+
+    RespuestaEncuesta:
+      type: object
+      required:
+        - preguntaId
+      properties:
+        preguntaId:
+          type: string
+          format: uuid
+        respuestasPosiblesIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        valor:
+          type: string
+          nullable: true
+
+
+    DatosEncuesta:
+      type: object
+      required:
+        - encuestaId
+        - preguntas
+      properties:
+        encuestaId:
+          type: string
+          format: uuid
+        preguntas:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatosPregunta'
+
+
+    DatosPregunta:
+      type: object
+      required:
+        - preguntaId
+        - respuestasPosibles
+      properties:
+        preguntaId:
+          type: string
+          format: uuid
+        respuestasPosibles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatoRespuestaPosible'
+
+
+    DatoRespuestaPosible:
+      type: object
+      required:
+        - respuestaPosibleId
+        - cantSelec
+      properties:
+        respuestaPosibleId:
+          type: string
+          format: uuid
+        cantSelec:
+          type: integer
+
+
+security:
+  - bearerAuth: []
