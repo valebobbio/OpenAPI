@@ -1,0 +1,357 @@
+openapi: 3.0.3
+info:
+  title: API de Usuarios - PPC Crianza
+  version: "1.0.0"
+  description: >
+    Contrato del bounded context "Usuarios": gestión de autenticación para Referentes Parentales
+    registrados (PerfilDespersonalizado) y administradores del CMS (AdministradorPPC).
+
+servers:
+  - url: https://api.ppc-crianza.inau.gub.uy/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Autenticación Móvil
+    description: Registro e inicio de sesión con Google para el Referente Parental Registrado.
+  - name: Autenticación CMS
+    description: Inicio de sesión para Administradores PPC.
+  - name: Administradores PPC
+    description: Gestión de usuarios del CMS (AdministradorPPC).
+  - name: cms
+    description: Operaciones consumidas por el CMS de administración.
+  - name: mobile
+    description: Operaciones consumidas por la app móvil.
+
+paths:
+
+  /autenticacion/movil/google:
+    post:
+      operationId: autenticarGoogle
+      tags: [Autenticación Móvil, mobile]
+      summary: Registra o autentica un Referente Parental mediante Google Sign-In.
+      description: >
+        Recibe el idToken de Google desde la app móvil.
+        - Si la cuenta no está vinculada, crea la entidad Registrado y genera su PerfilDespersonalizado.
+        - Si ya existe, recupera el perfil despersonalizado asociado.
+        - Emite el token JWT para guardar progreso y responder encuestas vinculadas a su `perfilDespersonalizadoId`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutenticacionGoogleInput'
+      responses:
+        '200':
+          description: Autenticación exitosa. Retorna el token JWT y la referencia al perfil despersonalizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaAutenticacionMovil'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+
+
+  /autenticacion/cms/login:
+    post:
+      operationId: loginCms
+      tags: [Autenticación CMS, cms]
+      summary: Inicia sesión en el CMS para un AdministradorPPC.
+      description: Autenticación mediante correo (o usuario) y contraseña para administradores del CMS.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginCmsInput'
+      responses:
+        '200':
+          description: Login exitoso, devuelve el token JWT administrativo y los datos del AdministradorPPC.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaLoginCms'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+
+
+  /administradores:
+    get:
+      #Creo que no necesitamos pero mejor que quede hecho desde ya
+      operationId: listarAdministradores
+      tags: [Administradores PPC, cms]
+      summary: Lista todos los administradores del CMS con soporte para paginación.
+      parameters:
+        - name: pagina
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: tamañoPagina
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Listado paginado de administradores PPC.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contenido, paginacion]
+                properties:
+                  contenido:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdministradorPPC'
+                  paginacion:
+                    $ref: '../common.yaml#/components/schemas/PaginacionMeta'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+        '403':
+          $ref: '../common.yaml#/components/responses/Prohibido'
+
+    post:
+      #No se como es el tema de creación de usuarios en cms
+      operationId: crearAdministrador
+      tags: [Administradores PPC, cms]
+      summary: Registra un nuevo AdministradorPPC en el CMS.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdministradorPPCInput'
+      responses:
+        '201':
+          description: Administrador creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdministradorPPC'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+        '403':
+          $ref: '../common.yaml#/components/responses/Prohibido'
+
+  /administradores/{administradorId}:
+    parameters:
+      - name: administradorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: obtenerAdministrador
+      tags: [Administradores PPC, cms]
+      summary: Obtiene el detalle de un AdministradorPPC por su ID.
+      responses:
+        '200':
+          description: Administrador encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdministradorPPC'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+    put:
+      #No se como es el tema de creación de usuarios en cms
+      operationId: actualizarAdministrador
+      tags: [Administradores PPC, cms]
+      summary: Actualiza los datos de un AdministradorPPC.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdministradorPPCInput'
+      responses:
+        '200':
+          description: Administrador actualizado correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdministradorPPC'
+        '400':
+          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+        '401':
+          $ref: '../common.yaml#/components/responses/NoAutorizado'
+        '404':
+          $ref: '../common.yaml#/components/responses/NoEncontrado'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: '../common.yaml#/components/securitySchemes/bearerAuth'
+
+  schemas:
+
+    #Me ayude con IA, no se realmente si funciona asi el inicio de sesión con Google
+    AutenticacionGoogleInput:
+      type: object
+      required: [idToken]
+      description: Payload de entrada enviado por la app móvil tras el inicio de sesión con Google.
+      properties:
+        idToken:
+          type: string
+          description: Token JWT de identidad provisto por Google Sign-In.
+          example: "eyJhbGciOiJSUzI1Ni..."
+
+    PerfilDespersonalizadoDto:
+      type: object
+      required: [perfilDespersonalizadoId]
+      description: DTO de salida que abstrae el PerfilDespersonalizado. Expone únicamente su identificador.
+      properties:
+        perfilDespersonalizadoId:
+          type: string
+          format: uuid
+          example: "e58ed080-829d-40e8-b0a1-a7465668b209"
+
+    RespuestaAutenticacionMovil:
+      type: object
+      required: [tokenAcceso, perfilDespersonalizado]
+      properties:
+        tokenAcceso:
+          type: string
+          description: Token JWT que la app móvil adjuntará en peticiones protegidas.
+        perfilDespersonalizado:
+          $ref: '#/components/schemas/PerfilDespersonalizadoDto'
+
+
+    NinoACargoInput:
+      type: object
+      required: [fechaNacimiento, genero, relacion]
+      description: DTO de entrada para reportar datos del nodo familiar en encuestas.
+      properties:
+        fechaNacimiento:
+          type: string
+          format: date
+          example: "2022-05-15"
+        genero:
+          $ref: '../common.yaml#/components/schemas/Genero'
+        relacion:
+          $ref: '../common.yaml#/components/schemas/Relacion'
+
+
+    LoginCmsInput:
+      type: object
+      required: [usuarioOCorreo, contrasena]
+      description: DTO de entrada con credenciales para login en la consola CMS (acepta usuario o correo).
+      properties:
+        usuarioOCorreo:
+          type: string
+          description: Nombre de usuario (ej. "jperez") o dirección de correo electrónico (ej. "juan.perez@inau.gub.uy").
+          example: "jperez"
+        contrasena:
+          type: string
+          format: password
+          example: "ClaveSegura2026!"
+
+    AdministradorPPC:
+      type: object
+      required: [id, nombre, apellido, usuario, correo]
+      description: >
+        DTO de salida para AdministradorPPC. Excluye la contraseña y mapea las 
+        relaciones hacia otros contexts usando arrays de identificadores planos (string, UUID).
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        nombre:
+          type: string
+          example: "Juan"
+        apellido:
+          type: string
+          example: "Pérez"
+        usuario:
+          type: string
+          example: "jperez"
+        correo:
+          type: string
+          format: email
+          example: "juan.perez@inau.gub.uy"
+        perfilesDespersonalizadosIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Lista de IDs de los perfiles despersonalizados asociados.
+        administraModulosIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Lista de IDs de los módulos de contenido que administra (hacia contenido.yaml).
+        gestionaEncuestasIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Lista de IDs de las encuestas que gestiona (hacia encuestas.yaml).
+
+    AdministradorPPCInput:
+      type: object
+      required: [nombre, apellido, usuario, correo, contrasena]
+      description: DTO de entrada para crear o actualizar un AdministradorPPC desde el CMS.
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Juan"
+        apellido:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Pérez"
+        usuario:
+          type: string
+          minLength: 3
+          maxLength: 50
+          example: "jperez"
+        correo:
+          type: string
+          format: email
+          example: "juan.perez@inau.gub.uy"
+        contrasena:
+          type: string
+          format: password
+          minLength: 8
+          example: "ClaveSegura2026!"
+        administraModulosIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        gestionaEncuestasIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    RespuestaLoginCms:
+      type: object
+      required: [tokenAcceso, administrador]
+      properties:
+        tokenAcceso:
+          type: string
+          description: Token JWT administrativo.
+        administrador:
+          $ref: '#/components/schemas/AdministradorPPC'
