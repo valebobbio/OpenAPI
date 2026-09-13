@@ -5,6 +5,25 @@ organizada como contrato-first: se define primero la forma de la
 comunicación entre los clientes (app móvil, CMS web) y el backend, y a
 partir de ahí se implementa.
 
+## Ubicación y gobernanza del contrato (ADR-GLOBAL-001)
+
+- **Única fuente de verdad:** el contrato se escribe a mano en un único
+  lugar — el repositorio del CMS — para que no existan copias manuales que
+  puedan divergir entre APP y CMS.
+- **APP no clona el repo del CMS.** No usa git submodules ni depende de
+  tener ese repositorio local. En cambio, apunta a una **URL publicada,
+  pineada a un tag/release del contrato**, y genera desde ahí un cliente
+  tipado (ver [Cómo consume APP el
+  contrato](#cómo-consume-app-el-contrato)).
+- **El CMS es dueño exclusivo del contrato.** Un cambio que el equipo de
+  APP necesite (un campo nuevo, un endpoint) se pide o propone en el
+  repositorio del CMS — no se edita directamente desde el lado de APP.
+- **Validación en CI:** cada pull request que toque el contrato, dentro
+  del repo del CMS, corre Redocly CLI (`lint`) automáticamente. Mientras
+  este repositorio siga separado, correr `npx @redocly/cli lint` a mano
+  antes de cada commit cumple el mismo rol.
+
+
 ## Estructura del repositorio
 
 ```
@@ -135,6 +154,30 @@ con un script si van a hacerlo seguido.
 El archivo `*.bundled.yaml` resultante **no se edita nunca a mano** — se
 regenera cada vez que cambie el archivo de dominio o `common.yaml`, y es
 el único que se sube a SwaggerHub.
+
+
+## Cómo consume APP el contrato
+
+Siguiendo ADR-GLOBAL-001, el repositorio de APP **no clona este
+repositorio ni usa git submodules**. En cambio:
+
+1. El contrato publicado en el tag/release vigente queda disponible en una
+   URL estable, pineada a ese tag.
+2. Desde APP, se genera el modelo o cliente tipado correspondiente con una
+   herramienta de codegen (por ejemplo, `openapi-generator-cli`) apuntando
+   a esa URL.
+3. El código generado se commitea en el repositorio de APP, pero **se
+   marca explícitamente como generado y no editable a mano** (por ejemplo,
+   con un comentario de cabecera o una carpeta `generated/` dedicada).
+4. Cuando el contrato cambia, el equipo actualiza deliberadamente el tag
+   que consume APP y vuelve a correr el codegen — esto no pasa
+   automáticamente, así que si se olvida, APP puede quedar trabajando
+   contra una versión vieja sin ningún error de compilación que lo avise.
+
+Este mecanismo resuelve, para la porción de DTOs/modelos de la API, la
+sincronización entre CMS y APP — pero no cubre reglas de negocio del
+dominio que no se expresan en el contrato (eso queda fuera de este
+alcance).
 
 ## Convenciones generales
 
