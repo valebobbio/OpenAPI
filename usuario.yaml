@@ -51,9 +51,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/RespuestaAutenticacionMovil'
         '400':
-          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+          $ref: './common.yaml#/components/responses/SolicitudInvalida'
         '401':
-          $ref: '../common.yaml#/components/responses/NoAutorizado'
+          $ref: './common.yaml#/components/responses/NoAutorizado'
 
 
   /autenticacion/cms/login:
@@ -77,9 +77,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/RespuestaLoginCms'
         '400':
-          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+          $ref: './common.yaml#/components/responses/SolicitudInvalida'
         '401':
-          $ref: '../common.yaml#/components/responses/NoAutorizado'
+          $ref: './common.yaml#/components/responses/NoAutorizado'
 
 
   /administradores:
@@ -114,11 +114,11 @@ paths:
                     items:
                       $ref: '#/components/schemas/AdministradorPPC'
                   paginacion:
-                    $ref: '../common.yaml#/components/schemas/PaginacionMeta'
+                    $ref: './common.yaml#/components/schemas/PaginacionMeta'
         '401':
-          $ref: '../common.yaml#/components/responses/NoAutorizado'
+          $ref: './common.yaml#/components/responses/NoAutorizado'
         '403':
-          $ref: '../common.yaml#/components/responses/Prohibido'
+          $ref: './common.yaml#/components/responses/Prohibido'
 
     post:
       #No se como es el tema de creación de usuarios en cms
@@ -139,11 +139,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdministradorPPC'
         '400':
-          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+          $ref: './common.yaml#/components/responses/SolicitudInvalida'
         '401':
-          $ref: '../common.yaml#/components/responses/NoAutorizado'
+          $ref: './common.yaml#/components/responses/NoAutorizado'
         '403':
-          $ref: '../common.yaml#/components/responses/Prohibido'
+          $ref: './common.yaml#/components/responses/Prohibido'
 
   /administradores/{administradorId}:
     parameters:
@@ -166,9 +166,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdministradorPPC'
         '401':
-          $ref: '../common.yaml#/components/responses/NoAutorizado'
+          $ref: './common.yaml#/components/responses/NoAutorizado'
         '404':
-          $ref: '../common.yaml#/components/responses/NoEncontrado'
+          $ref: './common.yaml#/components/responses/NoEncontrado'
 
     put:
       #No se como es el tema de creación de usuarios en cms
@@ -189,16 +189,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdministradorPPC'
         '400':
-          $ref: '../common.yaml#/components/responses/SolicitudInvalida'
+          $ref: './common.yaml#/components/responses/SolicitudInvalida'
         '401':
-          $ref: '../common.yaml#/components/responses/NoAutorizado'
+          $ref: './common.yaml#/components/responses/NoAutorizado'
         '404':
-          $ref: '../common.yaml#/components/responses/NoEncontrado'
+          $ref: './common.yaml#/components/responses/NoEncontrado'
 
 components:
   securitySchemes:
     bearerAuth:
-      $ref: '../common.yaml#/components/securitySchemes/bearerAuth'
+      $ref: './common.yaml#/components/securitySchemes/bearerAuth'
 
   schemas:
 
@@ -244,9 +244,9 @@ components:
           format: date
           example: "2022-05-15"
         genero:
-          $ref: '../common.yaml#/components/schemas/Genero'
+          $ref: './common.yaml#/components/schemas/Genero'
         relacion:
-          $ref: '../common.yaml#/components/schemas/Relacion'
+          $ref: './common.yaml#/components/schemas/Relacion'
 
 
     LoginCmsInput:
