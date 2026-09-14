@@ -1,0 +1,203 @@
+openapi: 3.0.3
+
+info:
+  title: API de Notificaciones - PPC Crianza
+  version: "1.0.0"
+  description: >
+    Contrato del bounded context "Notificaciones".
+    Permite a los referentes parentales consultar, marcar como leídas
+    y eliminar sus notificaciones.
+
+servers:
+  - url: https://api.ppc-crianza.inau.gub.uy/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Notificaciones
+    description: Operaciones relacionadas con las notificaciones.
+  - name: mobile
+    description: Operaciones consumidas por la aplicación móvil.
+  - name: cms
+    description: Operaciones consumidas por el CMS de administración.
+
+paths:
+
+  /notificaciones:
+    get:
+      operationId: listarNotificaciones
+      tags: [Notificaciones, mobile]
+      summary: Lista las notificaciones del referente parental.
+      description: >
+        Obtiene las notificaciones asociadas al referente parental autenticado,
+        ordenadas desde la más reciente hasta la más antigua.
+
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+
+        - name: tamañoPagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Listado paginado de notificaciones.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - contenido
+                  - paginacion
+                properties:
+                  contenido:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notificacion'
+                  paginacion:
+                    $ref: './common.yaml#/components/schemas/PaginacionMeta'
+
+        '401':
+          $ref: './common.yaml#/components/responses/NoAutorizado'
+
+  /notificaciones/{notificacionId}:
+    parameters:
+      - name: notificacionId
+        in: path
+        required: true
+        description: Identificador de la notificación.
+        schema:
+          type: string
+          format: uuid
+
+    delete:
+      operationId: eliminarNotificacion
+      tags: [Notificaciones, mobile]
+      summary: Elimina una notificación.
+      description: >
+        Elimina definitivamente la notificación del sistema.
+        La eliminación no modifica ni elimina el recurso al que pudiera
+        apuntar el destino de la notificación.
+      responses:
+        '204':
+          description: Notificación eliminada correctamente.
+
+        '401':
+          $ref: './common.yaml#/components/responses/NoAutorizado'
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+  /notificaciones/{notificacionId}/leer:
+    parameters:
+      - name: notificacionId
+        in: path
+        required: true
+        description: Identificador de la notificación.
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      operationId: marcarNotificacionComoLeida
+      tags: [Notificaciones, mobile]
+      summary: Marca una notificación como leída.
+      description: >
+        Registra en el backend la fecha en que el referente parental
+        marcó la notificación como leída.
+      responses:
+        '200':
+          description: Notificación marcada como leída.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notificacion'
+
+        '401':
+          $ref: './common.yaml#/components/responses/NoAutorizado'
+
+        '404':
+          $ref: './common.yaml#/components/responses/NoEncontrado'
+
+components:
+   securitySchemes:
+      bearerAuth:
+        $ref: './common.yaml#/components/securitySchemes/bearerAuth'
+
+   schemas:
+    Notificacion:
+      type: object
+      required:
+        - id
+        - mensaje
+        - fechaCreacion
+        - referenteParentalId
+
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único de la notificación.
+
+        mensaje:
+          type: string
+          description: Mensaje que se muestra al referente parental.
+
+        fechaCreacion:
+          type: string
+          format: date-time
+          description: Fecha y hora en que se creó la notificación.
+
+        fechaLectura:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Fecha y hora en que la notificación fue marcada como leída.
+            Es null cuando la notificación todavía no fue leída.
+
+        referenteParentalId:
+          type: string
+          format: uuid
+          description: >
+            Identificador del referente parental al que pertenece
+            la notificación.
+
+        destino:
+          $ref: '#/components/schemas/DestinoNotificacion'
+
+
+    DestinoNotificacion:
+      type: object
+      required:
+        - tipo
+        - id
+      description: >
+        Identifica el recurso o funcionalidad que debe abrirse cuando
+        el referente parental interactúa con la notificación.
+
+      properties:
+
+        tipo:
+          type: string
+          description: Tipo de recurso al que apunta la notificación.
+          enum:
+            - ENCUESTA
+            - MODULO
+            - SECCION
+
+        id:
+          type: string
+          format: uuid
+          description: Identificador del recurso de destino.
